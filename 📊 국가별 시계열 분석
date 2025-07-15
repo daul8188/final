@@ -1,0 +1,18 @@
+with st.expander("📊 국가별 시계열 분석"):
+    country_list = sorted(df["Country Name"].unique())
+    selected_country = st.selectbox("국가 선택", country_list)
+
+    country_data = df[df["Country Name"] == selected_country].sort_values("Year")
+
+    fig2, ax2 = plt.subplots(figsize=(10, 5))
+    ax2.plot(country_data["Year"], country_data["GDP USD"], label="GDP (USD)", color="blue")
+    ax2.set_ylabel("GDP (USD)", color="blue")
+    ax2.tick_params(axis="y", labelcolor="blue")
+
+    ax3 = ax2.twinx()
+    ax3.plot(country_data["Year"], country_data["CO2"], label="CO₂ (tons)", color="red")
+    ax3.set_ylabel("CO₂ Emissions", color="red")
+    ax3.tick_params(axis="y", labelcolor="red")
+
+    plt.title(f"{selected_country}의 연도별 GDP 및 CO₂ 배출량")
+    st.pyplot(fig2)
