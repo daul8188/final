@@ -1,0 +1,20 @@
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+df = pd.read_csv('../data/gdp_co2_by_country.csv')
+
+# 특정 연도만 추출
+year = 2020
+df_year = df[df['Year'] == year].dropna(subset=['Per Capita CO2'])
+
+# 상위 10개 국가 시각화
+top10 = df_year.sort_values('Per Capita CO2', ascending=False).head(10)
+
+plt.figure(figsize=(12,6))
+sns.barplot(x='Per Capita CO2', y='Country Name', data=top10, palette='Reds_r')
+plt.title(f'Top 10 Countries by Per Capita CO₂ Emissions ({year})')
+plt.xlabel('CO₂ Emissions per Capita (metric tons)')
+plt.ylabel('Country')
+plt.tight_layout()
+plt.show()
