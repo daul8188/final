@@ -1,61 +1,47 @@
+import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
-import os
+import seaborn as sns
+import matplotlib.pyplot as plt
 
-# 설정: 시각화 스타일
-sns.set(style="whitegrid")
+# 페이지 기본 설정
+st.set_page_config(page_title="GDP vs CO₂ Emissions", layout="wide")
+st.title("🌍 GDP vs CO₂ Emissions Dashboard")
+st.markdown("시각화를 통해 세계 각국의 경제와 환경 사이의 관계를 살펴보세요.")
 
-def load_data(filepath: str) -> pd.DataFrame:
-    """CSV 파일에서 데이터 불러오기"""
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"파일이 존재하지 않습니다: {filepath}")
-    return pd.read_csv(filepath)
+# 데이터 로드 함수
+@st.cache_data
+def load_data():
+    df = pd.read_csv("gdp_co2_by_country.csv")
+    df = df.dropna(subset=["GDP USD", "CO2", "Country Name", "Year", "Population", "GDP Category"])
+    return df
 
-def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
-    """최신 연도 데이터 필터링 및 전처리"""
-    latest_year = df["Year"].max()
-    df_latest = df[df["Year"] == latest_year].copy()
+# 데이터 불러오기
+df = load_data()
 
-    # 필요한 열 존재 확인
-    required_columns = ["GDP USD", "CO2", "Country Name", "Population", "GDP Category"]
-    df_latest = df_latest.dropna(subset=required_columns)
+# 연도 선택
+years = sorted(df["Year"].unique(), reverse=True)
+selected_year = st.selectbox("📅 연도 선택", years)
 
-    # 로그 변환
-    df_latest["Log GDP"] = np.log10(df_latest["GDP USD"] + 1)
-    df_latest["Log CO2"] = np.log10(df_latest["CO2"] + 1)
+# 해당 연도 데이터 필터링
+df_year = df[df["Year"] == selected_year].copy()
+df_year["Log GDP"] = np.log10(df_year["GDP USD"] + 1)
+df_year["Log CO2"] = np.log10(df_year["CO2"] + 1)
 
-    return df_latest, latest_year
+# 그래프 출력
+st.subheader(f"📈 GDP vs CO₂ Emissions (log scale) - {selected_year}")
 
-def plot_gdp_vs_co2(df: pd.DataFrame, year: int) -> None:
-    """GDP vs CO2 산점도 시각화"""
-    plt.figure(figsize=(10, 6))
-    scatter = sns.scatterplot(
-        data=df,
-        x="Log GDP", y="Log CO2",
-        hue="GDP Category", size="Population",
-        sizes=(20, 300), palette="viridis", alpha=0.8, edgecolor="gray"
-    )
+fig, ax = plt.subplots(figsize=(10, 6))
+scatter = sns.scatterplot(
+    data=df_year,
+    x="Log GDP", y="Log CO2",
+    hue="GDP Category", size="Population",
+    palette="viridis", sizes=(30, 300), alpha=0.7, edgecolor="gray", legend=False
+)
+ax.set_xlabel("Log GDP (USD)")
+ax.set_ylabel("Log CO₂ Emissions (Metric Tons)")
+st.pyplot(fig)
 
-    plt.title(f"GDP vs CO₂ Emissions (log scale) - {year}", fontsize=14)
-    plt.xlabel("Log GDP (USD)")
-    plt.ylabel("Log CO₂ Emissions (Metric Tons)")
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0)
-    plt.tight_layout()
-    plt.savefig("gdp_vs_co2_plot.png")
-    plt.show()
-
-def main():
-    data_path = "gdp_co2_by_country.csv"
-
-    try:
-        df = load_data(data_path)
-        df_processed, year = preprocess_data(df)
-        plot_gdp_vs_co2(df_processed, year)
-        print(f"분석 완료: {year}년 데이터 시각화 완료 (파일 저장됨: gdp_vs_co2_plot.png)")
-    except Exception as e:
-        print(f"[오류 발생] {e}")
-
-if __name__ == "__main__":
-    main()
+# 데이터 미리보기
+with st.expander("🔍 데이터 테이블 보기"):
+    st.dataframe(df_year[["Country Name", "GDP USD", "CO2", "Population", "GDP Category"]].sort_values(by="GDP USD", ascending=False))
