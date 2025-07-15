@@ -1,107 +1,80 @@
+# streamlit_app.py
+
+import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib.pyplot as plt
 import os
 
-# 폴더 생성
-os.makedirs("output/data", exist_ok=True)
-os.makedirs("output/figures", exist_ok=True)
+st.set_page_config(page_title="GDP & CO₂ Dashboard", layout="wide")
 
-# CSV 파일 경로 (수정 가능)
+st.title("🌍 Global GDP & CO₂ Emissions Analysis")
+
+# 파일 경로
 DATA_PATH = "data/gdp_co2_by_country.csv"
 
-# 데이터 불러오기
-try:
-    df = pd.read_csv(DATA_PATH)
-except FileNotFoundError:
-    raise FileNotFoundError(f"CSV 파일이 '{DATA_PATH}' 경로에 없습니다. GitHub에 업로드했는지 확인하세요.")
+# 데이터 불러오기 (Streamlit Cloud에서 에러 방지용 처리 포함)
+@st.cache_data
+def load_data():
+    if not os.path.exists(DATA_PATH):
+        return None
+    return pd.read_csv(DATA_PATH)
 
-# 1. 국가별 GDP vs CO₂
-def analyze_gdp_vs_co2(country):
-    country_df = df[df["Country Name"] == country]
-    filename = country.replace(" ", "_")
+df = load_data()
 
-    if country_df.empty:
-        print(f"[경고] '{country}'에 해당하는 데이터가 없습니다.")
-        return
+if df is None:
+    st.warning(f"""
+    ❗ 데이터 파일이 존재하지 않습니다.
 
-    country_df.to_csv(f"output/data/1_gdp_co2_{filename}.csv", index=False)
+    📌 아래 조건을 확인하세요:
+    - `data/gdp_co2_by_country.csv` 파일을 GitHub 저장소에 업로드했나요?
+    - `streamlit_app.py`와 같은 저장소에 있고, `data/` 폴더 안에 있어야 합니다.
+    
+    예:  
+    ├── data/  
+    │   └── gdp_co2_by_country.csv  
+    └── streamlit_app.py
+    """)
+    st.stop()
 
-    plt.figure(figsize=(10,6))
-    sns.lineplot(x="Year", y="GDP USD", data=country_df, label="GDP (USD)")
-    sns.lineplot(x="Year", y="CO2", data=country_df, label="CO₂ Emissions")
-    plt.yscale("log")
-    plt.title(f"{country}: GDP vs CO₂ Emissions")
-    plt.xlabel("Year")
-    plt.ylabel("Log-scaled Value")
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(f"output/figures/1_gdp_co2_{filename}.png")
-    plt.close()
-    print(f"[완료] 1. GDP vs CO₂ 분석 저장됨 → {filename}")
+# 사이드바 설정
+st.sidebar.header("🔧 분석 설정")
+country = st.sidebar.selectbox("국가 선택", sorted(df["Country Name"].unique()), index=0)
+year = st.sidebar.slider("연도 선택 (Per Capita 분석)", min_value=int(df["Year"].min()), max_value=int(df["Year"].max()), value=2020)
+start_year = st.sidebar.slider("시작 연도 (성장률 vs 배출)", min_value=1960, max_value=2022, value=2000)
 
-# 2. 1인당 CO₂ 상위 10개국
-def analyze_per_capita_top10(year):
-    year_df = df[df["Year"] == year].dropna(subset=["Per Capita CO2"])
-    if year_df.empty:
-        print(f"[경고] {year}년 데이터가 없습니다.")
-        return
+# 1. GDP vs CO₂
+st.subheader("1. GDP vs CO₂ Emissions")
+df_country = df[df["Country Name"] == country]
+fig1, ax1 = plt.subplots(figsize=(10, 5))
+sns.lineplot(data=df_country, x="Year", y="GDP USD", label="GDP", ax=ax1)
+sns.lineplot(data=df_country, x="Year", y="CO2", label="CO₂ Emissions", ax=ax1)
+ax1.set_yscale("log")
+ax1.set_title(f"{country}: GDP vs CO₂ Emissions (log scale)")
+st.pyplot(fig1)
 
-    top10 = year_df.sort_values("Per Capita CO2", ascending=False).head(10)
-    top10.to_csv(f"output/data/2_top10_per_capita_{year}.csv", index=False)
+# 2. Per Capita CO₂ Top 10
+st.subheader("2. Per Capita CO₂ Emissions Top 10")
+df_year = df[df["Year"] == year].dropna(subset=["Per Capita CO2"])
+top10 = df_year.sort_values("Per Capita CO2", ascending=False).head(10)
+fig2, ax2 = plt.subplots(figsize=(10, 5))
+sns.barplot(data=top10, x="Per Capita CO2", y="Country Name", palette="Reds_r", ax=ax2)
+ax2.set_title(f"Top 10 CO₂ Emitters per Capita ({year})")
+st.pyplot(fig2)
 
-    plt.figure(figsize=(10,6))
-    sns.barplot(x="Per Capita CO2", y="Country Name", data=top10, palette="Reds_r")
-    plt.title(f"Top 10 Countries by Per Capita CO₂ Emissions in {year}")
-    plt.xlabel("CO₂ per Capita (metric tons)")
-    plt.tight_layout()
-    plt.savefig(f"output/figures/2_top10_per_capita_{year}.png")
-    plt.close()
-    print(f"[완료] 2. Per Capita Top 10 저장됨 → {year}")
+# 3. CO₂ 효율성 (GDP 대비 배출량)
+st.subheader("3. CO₂ Emission Efficiency by GDP Category")
+df_eff = df[df["Year"] == year]
+fig3, ax3 = plt.subplots(figsize=(8, 5))
+sns.boxplot(data=df_eff, x="GDP Category", y="CO2 Per GDP", ax=ax3)
+ax3.set_title(f"CO₂ per GDP by Category ({year})")
+st.pyplot(fig3)
 
-# 3. CO₂ per GDP (효율성)
-def analyze_efficiency(year):
-    year_df = df[df["Year"] == year]
-    if year_df.empty:
-        print(f"[경고] {year}년 데이터가 없습니다.")
-        return
-
-    year_df.to_csv(f"output/data/3_co2_efficiency_{year}.csv", index=False)
-
-    plt.figure(figsize=(8,6))
-    sns.boxplot(x="GDP Category", y="CO2 Per GDP", data=year_df)
-    plt.title(f"CO₂ Emissions per GDP by Category ({year})")
-    plt.tight_layout()
-    plt.savefig(f"output/figures/3_co2_efficiency_{year}.png")
-    plt.close()
-    print(f"[완료] 3. CO₂ 효율성 저장됨 → {year}")
-
-# 4. 성장률 vs CO₂ 변화율
-def analyze_growth_vs_emission(start_year):
-    filtered = df[df["Year"] >= start_year].dropna(subset=["GDP %", "CO2 %"])
-    if filtered.empty:
-        print(f"[경고] {start_year}년 이후 데이터가 없습니다.")
-        return
-
-    filtered.to_csv(f"output/data/4_growth_vs_emission_from_{start_year}.csv", index=False)
-
-    plt.figure(figsize=(8,6))
-    sns.scatterplot(x="GDP %", y="CO2 %", data=filtered, alpha=0.5)
-    sns.regplot(x="GDP %", y="CO2 %", data=filtered, scatter=False, color="red")
-    plt.title(f"GDP Growth vs CO₂ Emissions Change (from {start_year})")
-    plt.xlabel("GDP Growth Rate (%)")
-    plt.ylabel("CO₂ Change Rate (%)")
-    plt.tight_layout()
-    plt.savefig(f"output/figures/4_growth_vs_emission_from_{start_year}.png")
-    plt.close()
-    print(f"[완료] 4. 성장률 vs 배출량 변화 저장됨 → {start_year}~")
-
-# ========================
-# ✅ 여기서 설정하면 됨
-# ========================
-
-# 분석 파라미터 직접 지정!
-analyze_gdp_vs_co2("South Korea")
-analyze_per_capita_top10(2020)
-analyze_efficiency(2021)
-analyze_growth_vs_emission(2005)
+# 4. GDP 성장률 vs CO₂ 배출 변화율
+st.subheader("4. GDP Growth Rate vs CO₂ Emissions Change")
+df_growth = df[df["Year"] >= start_year].dropna(subset=["GDP %", "CO2 %"])
+fig4, ax4 = plt.subplots(figsize=(8, 5))
+sns.scatterplot(data=df_growth, x="GDP %", y="CO2 %", alpha=0.4, ax=ax4)
+sns.regplot(data=df_growth, x="GDP %", y="CO2 %", scatter=False, color="red", ax=ax4)
+ax4.set_title(f"GDP Growth vs CO₂ Change (from {start_year})")
+st.pyplot(fig4)
